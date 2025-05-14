@@ -83,7 +83,7 @@ async def handle_start(message: Message, bot: Bot):
                     reply_markup=bonus_kb_with_prefill()
                 )
 
-                await asyncio.sleep(60)
+                await asyncio.sleep(30)
                 await bot.send_message(message.chat.id, "🔕 Не отключай уведомления этого бота.")
             except Exception as e:
                 print(f"Ошибка при отправке бонуса: {e}")

@@ -1,30 +1,29 @@
-# main.py
-
 import asyncio
+import logging
 from aiogram import Bot, Dispatcher
-from dotenv import load_dotenv
-
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
-from storage import init_db
+from handlers import join_handler, admin_panel
 
-# Загрузим .env
-load_dotenv()
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Инициализация бота и диспетчера
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+from aiogram.client.default import DefaultBotProperties
 
-# Импорт и регистрация хэндлеров
-from handlers.join_handler import register_join_handlers
-from handlers.admin_handler import register_admin_handlers
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
-# Теперь register_* сами ожидают Bot, Dispatcher
-register_join_handlers(dp)
-register_admin_handlers(dp, bot)
+dp = Dispatcher(storage=MemoryStorage())
 
-# Инициализируем БД перед запуском
-async def on_startup():
-    await init_db()
+# Регистрация обработчиков
+dp.include_router(join_handler.router)
+dp.include_router(admin_panel.router)
+
+async def main():
+    logger.info("Бот запускается...")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    dp.run_polling(bot, skip_updates=True, on_startup=on_startup)
+    asyncio.run(main())

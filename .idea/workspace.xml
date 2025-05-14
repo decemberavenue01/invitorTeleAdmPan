@@ -5,9 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="eb4f8c44-4246-44db-af3d-0dd73a4006c7" name="Changes" comment="обновил">
+      <change afterPath="$PROJECT_DIR$/data.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/handlers/admin.py" beforeDir="false" afterPath="$PROJECT_DIR$/handlers/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/handlers/admin_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/handlers/admin_handler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/handlers/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/handlers/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/handlers/admin_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/handlers/admin_panel.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/handlers/join_handler.py" beforeDir="false" afterPath="$PROJECT_DIR$/handlers/join_handler.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
@@ -67,6 +68,9 @@
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\hollow\PycharmProjects\InvitorForTelegramCHannel\media" />
     </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\hollow\PycharmProjects\InvitorForTelegramCHannel" />
+    </key>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
@@ -91,7 +95,15 @@
       <option name="project" value="LOCAL" />
       <updated>1747245291030</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="обновил">
+      <option name="closed" value="true" />
+      <created>1747246247131</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1747246247131</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">

@@ -1,65 +1,70 @@
-# handlers/join_handler.py
-
+from aiogram import Router, F
+from aiogram.types import (
+    ChatJoinRequest, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+)
+from aiogram.types.input_file import FSInputFile
 import asyncio
-from aiogram import Bot, Dispatcher
-from aiogram.types import ChatJoinRequest, CallbackQuery, InputFile, InlineKeyboardMarkup, InlineKeyboardButton
+from data import approved_users
+from aiogram import Bot
 
-from config import ADMIN_IDS
-from storage import add_user_to_db
-from handlers.admin_handler import notify_settings
+router = Router()
 
-async def on_join_request(req: ChatJoinRequest, bot: Bot):
-    # 1) Авто-одобрение
-    await bot.approve_chat_join_request(req.chat.id, req.from_user.id)
+# Кнопка "УЗНАТЬ РЕЗУЛЬТАТ"
+learn_more_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="УЗНАТЬ РЕЗУЛЬТАТ", callback_data="show_result")]
+    ]
+)
 
-    # 2) Сохранение пользователя
-    await add_user_to_db(req.from_user.id)
+# Кнопка "ПОЛУЧИТЬ БОНУС" — открывает ЛС с автотекстом
+bonus_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(
+            text="ПОЛУЧИТЬ БОНУС",
+            url="https://t.me/davidavidavidavidavidavidavid?start=Привет,%20я%20хочу%20получить%20бонус"
+        )]
+    ]
+)
 
-    # 3) Уведомление админов
-    for admin_id in ADMIN_IDS:
-        if notify_settings.get(admin_id, True):
-            await bot.send_message(
-                admin_id,
-                f"👤 Новый запрос принят от @{req.from_user.username or req.from_user.id}"
-            )
+@router.chat_join_request()
+async def handle_join_request(join_request: ChatJoinRequest, bot: Bot):
+    user_id = join_request.from_user.id
+    chat_id = join_request.chat.id
 
-    # 4) Первое приветствие
-    kb = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("Далее ▶️", callback_data="welcome_step2")
-    )
+    # Принимаем заявку
+    await bot.approve_chat_join_request(chat_id=chat_id, user_id=user_id)
+
+    # Сохраняем пользователя в базу
+    approved_users.add(user_id)
+
+    # Отправляем приветственное сообщение
+    photo = FSInputFile("media/welcome.jpg")
     await bot.send_photo(
-        chat_id=req.from_user.id,
-        photo=InputFile("welcome.jpg"),
-        caption="<b>Добро пожаловать!</b>\nЗдесь краткое описание…",
-        reply_markup=kb,
-        parse_mode="HTML"
+        chat_id=user_id,
+        photo=photo,
+        caption="Привет! Спасибо за подписку на мой канал!",
+        reply_markup=learn_more_kb
     )
 
-async def on_welcome_step2(callback: CallbackQuery, bot: Bot):
+@router.callback_query(F.data == "show_result")
+async def show_second_message(callback: CallbackQuery, bot: Bot):
+    user_id = callback.from_user.id
+
     await callback.answer()
 
-    me = await bot.get_me()
-    promo_text = "здесь_твой_шаблон_текста"
-    deep_link = f"https://t.me/{me.username}?start={promo_text}"
+    # Отправляем второе сообщение с бонусом
+    try:
+        photo = FSInputFile("media/welcome2.jpg")
+        await bot.send_photo(
+            chat_id=user_id,
+            photo=photo,
+            caption="У меня для тебя есть БОНУС, который...",
+            reply_markup=bonus_kb  # Кнопка для открытия чата с автотекстом
+        )
 
-    kb = InlineKeyboardMarkup().add(
-        InlineKeyboardButton("Написать мне 📩", url=deep_link)
-    )
-    await bot.send_photo(
-        chat_id=callback.from_user.id,
-        photo=InputFile("welcome2.jpg"),
-        caption="<i>Вот вторая часть приветствия…</i>",
-        reply_markup=kb,
-        parse_mode="HTML"
-    )
-
-    await asyncio.sleep(60)
-    await bot.send_message(callback.from_user.id, "🔕 Не отключай уведомления этого бота.")
-
-def register_join_handlers(dp: Dispatcher):
-    """
-    Регистрирует хэндлеры автоприёма заявок и callback.
-    Aiogram сам инжектит Bot и ChatJoinRequest/CallbackQuery по типизации.
-    """
-    dp.chat_join_request.register(on_join_request)
-    dp.callback_query.register(on_welcome_step2, lambda c: c.data == "welcome_step2")
+        # Через 60 секунд — напоминание
+        await asyncio.sleep(60)
+        await bot.send_message(user_id, "🔕 Не отключай уведомления этого бота.")
+    except Exception as e:
+        # Логируем ошибку, если не удается отправить сообщение
+        print(f"Ошибка при отправке второго сообщения: {e}")

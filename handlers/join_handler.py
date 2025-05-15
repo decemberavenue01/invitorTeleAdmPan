@@ -5,7 +5,7 @@ from aiogram.types import (
 from aiogram.types.input_file import FSInputFile
 from urllib.parse import quote
 import asyncio
-from data import approved_users
+
 
 router = Router()
 
@@ -46,8 +46,6 @@ async def handle_join_request(join_request: ChatJoinRequest, bot: Bot):
     # Одобряем заявку
     await bot.approve_chat_join_request(chat_id=chat_id, user_id=user_id)
 
-    # Сохраняем пользователя
-    approved_users.add(user_id)
 
     # Приветственное сообщение с кнопкой
     photo = FSInputFile("media/welcome.jpg")

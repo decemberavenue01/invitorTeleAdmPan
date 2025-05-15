@@ -4,8 +4,6 @@ import logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.strategy import FSMStrategy
-from aiogram.types import Message
 from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN

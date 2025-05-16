@@ -9,6 +9,8 @@ import asyncio
 from aiogram.enums import ParseMode
 import json
 import os
+from aiogram.filters import CommandStart
+
 
 router = Router()
 
@@ -134,13 +136,12 @@ async def handle_join_request(join_request: ChatJoinRequest, bot: Bot):
         parse_mode=ParseMode.HTML
     )
 
-@router.message(F.text.regexp(r"^/start(?:\s*(.*))?$"))
+@router.message(CommandStart(deep_link=True))
 async def start_handler(message: Message, bot: Bot):
-    args = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else ""
     user_id = message.from_user.id
-
     save_user(user_id)
 
+    args = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else ""
     print(f"/start вызван с args={args}")
 
     await send_intro_with_media(user_id, bot)

@@ -7,11 +7,30 @@ from aiogram.types.input_file import FSInputFile
 from urllib.parse import quote
 import asyncio
 from aiogram.enums import ParseMode
+import json
+import os
 
 router = Router()
 
 BOT_USERNAME = "invitorTeleAdmPan_bot"           # без @
 OWNER_USERNAME = "ray_trdr" # без @
+USERS_FILE = "users.json"
+
+def save_user(user_id):
+    if not os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump([], f)
+
+    with open(USERS_FILE, 'r', encoding='utf-8') as f:
+        try:
+            users = json.load(f)
+        except json.JSONDecodeError:
+            users = []
+
+    if user_id not in users:
+        users.append(user_id)
+        with open(USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(users, f)
 
 def learn_more_kb(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -120,10 +139,10 @@ async def start_handler(message: Message, bot: Bot):
     args = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else ""
     user_id = message.from_user.id
 
+    save_user(user_id)
+
     print(f"/start вызван с args={args}")
 
-
-    # отправляем медиа и бонус
     await send_intro_with_media(user_id, bot)
 
 @router.callback_query(F.data.startswith("check_result:"))

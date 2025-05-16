@@ -8,17 +8,19 @@ from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN
 from handlers import join_handler
+from handlers import broadcast_handler
 
-# 🔧 Настройка логирования
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 🤖 Инициализация бота и диспетчера
+
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 dp.include_router(join_handler.router)
+dp.include_router(broadcast_handler.router)
 
-# 🚀 Запуск бота
+
 async def main():
     logger.info("Бот запускается...")
     await dp.start_polling(bot)

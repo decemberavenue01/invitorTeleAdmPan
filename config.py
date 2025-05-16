@@ -1,17 +1,21 @@
-# config.py
 
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # подгрузит .env из корня проекта
+load_dotenv()
 
 # Токен бота
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Список админов (Telegram ID) — через запятую в .env
-_ADMIN_IDS = os.getenv("ADMIN_IDS", "")
-ADMIN_IDS = set(int(x) for x in _ADMIN_IDS.split(",") if x)
+# данные владельца из .env
+OWNER_USERNAME = os.getenv("OWNER_USERNAME", "")
+OWNER_ID = int(os.getenv("OWNER_ID", 0))
 
-# Канал, в котором бот админит (не используется в обработках сейчас,
-# но может понадобиться, например, для approve_chat_join_request)
-CHANNEL_ID = os.getenv("CHANNEL_ID")
+
+ADMIN_IDS = [
+    int(uid) for uid in os.getenv("ADMIN_IDS", "").split(",")
+    if uid.strip().isdigit()
+]
+
+# ID канала (если будет нужен)
+CHANNEL_ID = int(os.getenv("CHANNEL_ID", 0))

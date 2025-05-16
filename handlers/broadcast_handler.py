@@ -2,7 +2,6 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InputMediaPhoto
 from config import ADMIN_IDS
 
 import json
@@ -37,7 +36,11 @@ async def start_broadcast(msg: Message, state: FSMContext):
         return
     await state.clear()
     await state.update_data(broadcasts=[])
-    await msg.answer("<b>Начинаем создание рассылки.</b>\n\nПожалуйста, отправьте текст рассылки.\n<b>Отправьте /cancel для отмены в любой момент.</b>")
+    await msg.answer(
+        "<b>Начинаем создание рассылки.</b>\n\n"
+        "Пожалуйста, отправьте текст рассылки.\n"
+        "<b>Отправьте /cancel для отмены в любой момент.</b>"
+    )
     await state.set_state(BroadcastState.waiting_for_text)
 
 @router.message(F.text == "/cancel")
@@ -49,19 +52,32 @@ async def cancel_broadcast(msg: Message, state: FSMContext):
 async def admin_help(msg: Message):
     if msg.from_user.id not in ADMIN_IDS:
         return
-    await msg.answer("Доступные команды:\n\n/broadcast - создать автоматическую рассылку пользователям.\n/help - показать это сообщение.")
+    await msg.answer(
+        "Доступные команды:\n\n"
+        "/broadcast - создать автоматическую рассылку пользователям.\n"
+        "/help - показать это сообщение."
+    )
 
 @router.message(BroadcastState.waiting_for_text)
 async def get_text(msg: Message, state: FSMContext):
     if msg.text == "/cancel":
         await cancel_broadcast(msg, state)
         return
-    await state.update_data(current_broadcast={'text': msg.text})
-    await msg.answer("<b>Хотите прикрепить изображение или «кружок»?</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Фото", callback_data="photo"),
-         InlineKeyboardButton(text="Кружок", callback_data="video_note")],
-        [InlineKeyboardButton(text="Нет", callback_data="no_media")]
-    ]))
+
+    # Сохраняем text и entities (форматирование)
+    await state.update_data(current_broadcast={
+        'text': msg.text or "",
+        'entities': msg.entities or []
+    })
+
+    await msg.answer(
+        "<b>Хотите прикрепить изображение или «кружок»?</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Фото", callback_data="photo"),
+             InlineKeyboardButton(text="Кружок", callback_data="video_note")],
+            [InlineKeyboardButton(text="Нет", callback_data="no_media")]
+        ])
+    )
     await state.set_state(BroadcastState.waiting_for_media_choice)
 
 @router.callback_query(BroadcastState.waiting_for_media_choice)
@@ -69,6 +85,7 @@ async def media_choice(call: CallbackQuery, state: FSMContext):
     await call.answer()
     data = await state.get_data()
     current_broadcast = data.get('current_broadcast', {})
+
     if call.data == "photo":
         await call.message.answer("<b>Отправьте фото.</b>")
         await state.set_state(BroadcastState.waiting_for_photo)
@@ -97,10 +114,13 @@ async def get_video_note(msg: Message, state: FSMContext):
     await ask_for_button(msg, state)
 
 async def ask_for_button(msg_or_call, state: FSMContext):
-    await msg_or_call.answer("<b>Хотите добавить кнопку со ссылкой?</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Да", callback_data="yes_button"),
-         InlineKeyboardButton(text="Нет", callback_data="no_button")]
-    ]))
+    await msg_or_call.answer(
+        "<b>Хотите добавить кнопку со ссылкой?</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Да", callback_data="yes_button"),
+             InlineKeyboardButton(text="Нет", callback_data="no_button")]
+        ])
+    )
     await state.set_state(BroadcastState.waiting_for_button_text)
 
 @router.callback_query(F.data == "yes_button")
@@ -123,11 +143,14 @@ async def button_text(msg: Message, state: FSMContext):
     data = await state.get_data()
     current_broadcast = data.get('current_broadcast', {})
 
-    # Сохраняем текст кнопки
     current_broadcast['button_text'] = msg.text
     await state.update_data(current_broadcast=current_broadcast)
 
-    await msg.answer("<b>Теперь введите ссылку.</b>\n\nПоддерживаются ссылки на каналы/сайты/чаты.\nТакже ссылки формата: www.domain, для перехода в личные сообщения - t.me/юзернейм (БЕЗ @).")
+    await msg.answer(
+        "<b>Теперь введите ссылку.</b>\n\n"
+        "Поддерживаются ссылки на каналы/сайты/чаты.\n"
+        "Также ссылки формата: www.domain, для перехода в личные сообщения - t.me/юзернейм (БЕЗ @)."
+    )
     await state.set_state(BroadcastState.waiting_for_button_url)
 
 @router.message(BroadcastState.waiting_for_button_url)
@@ -183,18 +206,35 @@ async def show_preview_for_broadcast(msg_or_call, broadcast):
         ])
 
     await msg_or_call.answer("\U0001F4E2 Предпросмотр рассылки:")
+
     if 'photo' in broadcast:
-        await msg_or_call.answer_photo(photo=broadcast['photo'], caption=broadcast['text'], reply_markup=keyboard)
+        # Отправляем фото с caption и entities
+        await msg_or_call.answer_photo(
+            photo=broadcast['photo'],
+            caption=broadcast['text'],
+            caption_entities=broadcast.get('entities'),
+            reply_markup=keyboard
+        )
     elif 'video_note' in broadcast:
-        await msg_or_call.answer_video_note(video_note=broadcast['video_note'], reply_markup=keyboard)
+        await msg_or_call.answer_video_note(
+            video_note=broadcast['video_note'],
+            reply_markup=keyboard
+        )
     else:
-        await msg_or_call.answer(broadcast['text'], reply_markup=keyboard)
+        await msg_or_call.answer(
+            broadcast['text'],
+            entities=broadcast.get('entities'),
+            reply_markup=keyboard
+        )
 
 @router.callback_query(BroadcastState.waiting_for_additional_broadcast)
 async def additional_broadcast_decision(call: CallbackQuery, state: FSMContext):
     await call.answer()
     if call.data == "add_more_yes":
-        await call.message.answer("<b>Пожалуйста, отправьте текст второй рассылки.</b>\n<b>Отправьте /cancel для отмены.</b>")
+        await call.message.answer(
+            "<b>Пожалуйста, отправьте текст второй рассылки.</b>\n"
+            "<b>Отправьте /cancel для отмены.</b>"
+        )
         await state.set_state(BroadcastState.waiting_for_text)
     elif call.data == "add_more_no":
         await call.message.answer(
@@ -214,10 +254,12 @@ async def confirm_broadcast(call: CallbackQuery, state: FSMContext):
         await state.clear()
         await call.message.edit_text("<b>Рассылка отменена.</b>")
         return
+
     if call.data == "delay_send":
         await call.message.answer("<b>Через сколько минут отправить рассылку?</b>")
         await state.set_state(BroadcastState.waiting_for_delay_minutes)
         return
+
     if call.data == "confirm_send":
         await perform_broadcast(call.message, state)
 
@@ -226,6 +268,7 @@ async def delay_minutes(msg: Message, state: FSMContext):
     if msg.text == "/cancel":
         await cancel_broadcast(msg, state)
         return
+
     try:
         delay = int(msg.text)
         await msg.answer(f"Рассылка будет отправлена через {delay} минут.")
@@ -254,8 +297,8 @@ async def perform_broadcast(msg_or_call, state: FSMContext):
                         chat_id=user_id,
                         photo=broadcast['photo'],
                         caption=broadcast['text'],
-                        reply_markup=keyboard,
-                        parse_mode="HTML"
+                        caption_entities=broadcast.get('entities'),
+                        reply_markup=keyboard
                     )
                 elif 'video_note' in broadcast:
                     await msg_or_call.bot.send_video_note(
@@ -267,12 +310,14 @@ async def perform_broadcast(msg_or_call, state: FSMContext):
                     await msg_or_call.bot.send_message(
                         chat_id=user_id,
                         text=broadcast['text'],
-                        reply_markup=keyboard,
-                        parse_mode="HTML"
+                        entities=broadcast.get('entities'),
+                        reply_markup=keyboard
                     )
                 count += 1
-            except Exception as e:
-                print(f"Ошибка при отправке {user_id}: {e}")
+                await asyncio.sleep(0.05)  # небольшой таймаут для предотвращения блокировок
+            except Exception:
+                # Игнорируем ошибки, чтобы рассылка шла дальше
+                continue
 
-    await msg_or_call.answer(f"Рассылка завершена. Успешно отправлено: {count}")
+    await msg_or_call.answer(f"<b>Рассылка отправлена {count} пользователям.</b>")
     await state.clear()

@@ -38,9 +38,21 @@ async def start_broadcast(msg: Message, state: FSMContext):
     await state.update_data(broadcasts=[])
     await msg.answer(
         "<b>Начинаем создание рассылки.</b>\n\n"
-        "Пожалуйста, отправьте текст рассылки.\n"
-        "<b>Отправьте /cancel для отмены в любой момент.</b>"
+        "Пожалуйста, отправьте текст рассылки.\n\n"
+        "Пример HTML-разметки для рассылки (пишите именно так):\n"
+        "<pre>"
+        "&lt;b&gt;Жирный текст&lt;/b&gt; — жирный шрифт\n"
+        "&lt;i&gt;Курсив&lt;/i&gt; — курсив\n"
+        "&lt;u&gt;Подчёркнутый&lt;/u&gt; — подчёркивание\n"
+        "&lt;s&gt;Зачёркнутый&lt;/s&gt; — зачёркнутый текст\n"
+        "&lt;a href=&quot;URL&quot;&gt;Ссылка&lt;/a&gt; — гиперссылка\n"
+        "&lt;tg-spoiler&gt;Текст&lt;/tg-spoiler&gt; — спойлер\n"
+        "&lt;blockquote&gt;Цитата&lt;/blockquote&gt; — текст в цитате\n"
+        "</pre>\n\n"
+        "<b>Отправьте /cancel для отмены в любой момент.</b>",
+        parse_mode="HTML"
     )
+
     await state.set_state(BroadcastState.waiting_for_text)
 
 @router.message(F.text == "/cancel")

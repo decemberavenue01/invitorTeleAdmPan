@@ -7,7 +7,6 @@ from config import ADMIN_IDS
 
 import json
 import os
-from datetime import datetime, timedelta
 import asyncio
 
 router = Router()
@@ -22,6 +21,7 @@ class BroadcastState(StatesGroup):
     waiting_for_button_text = State()
     waiting_for_button_url = State()
     confirming = State()
+    waiting_for_additional_broadcast = State()
     waiting_for_delay_minutes = State()
 
 def get_all_users():
@@ -36,6 +36,7 @@ async def start_broadcast(msg: Message, state: FSMContext):
         await msg.answer("У вас нет прав для этой команды.")
         return
     await state.clear()
+    await state.update_data(broadcasts=[])
     await msg.answer("<b>Начинаем создание рассылки.</b>\n\nПожалуйста, отправьте текст рассылки.\n<b>Отправьте /cancel для отмены в любой момент.</b>")
     await state.set_state(BroadcastState.waiting_for_text)
 
@@ -55,7 +56,7 @@ async def get_text(msg: Message, state: FSMContext):
     if msg.text == "/cancel":
         await cancel_broadcast(msg, state)
         return
-    await state.update_data(text=msg.text)
+    await state.update_data(current_broadcast={'text': msg.text})
     await msg.answer("<b>Хотите прикрепить изображение или «кружок»?</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Фото", callback_data="photo"),
          InlineKeyboardButton(text="Кружок", callback_data="video_note")],
@@ -66,33 +67,41 @@ async def get_text(msg: Message, state: FSMContext):
 @router.callback_query(BroadcastState.waiting_for_media_choice)
 async def media_choice(call: CallbackQuery, state: FSMContext):
     await call.answer()
+    data = await state.get_data()
+    current_broadcast = data.get('current_broadcast', {})
     if call.data == "photo":
         await call.message.answer("<b>Отправьте фото.</b>")
         await state.set_state(BroadcastState.waiting_for_photo)
     elif call.data == "video_note":
         await call.message.answer("<b>Отправьте кружок (видео note).</b>")
         await state.set_state(BroadcastState.waiting_for_video_note)
-    elif call.data == "no_media":
+    else:
+        # no media
+        await state.update_data(current_broadcast=current_broadcast)
         await ask_for_button(call.message, state)
-        await state.set_state(BroadcastState.confirming)  # Перейти к следующему шагу
 
 @router.message(BroadcastState.waiting_for_photo, F.photo)
 async def get_photo(msg: Message, state: FSMContext):
-    await state.update_data(photo=msg.photo[-1].file_id)
+    data = await state.get_data()
+    current_broadcast = data.get('current_broadcast', {})
+    current_broadcast['photo'] = msg.photo[-1].file_id
+    await state.update_data(current_broadcast=current_broadcast)
     await ask_for_button(msg, state)
-    await state.set_state(BroadcastState.confirming)
 
 @router.message(BroadcastState.waiting_for_video_note, F.video_note)
 async def get_video_note(msg: Message, state: FSMContext):
-    await state.update_data(video_note=msg.video_note.file_id)
+    data = await state.get_data()
+    current_broadcast = data.get('current_broadcast', {})
+    current_broadcast['video_note'] = msg.video_note.file_id
+    await state.update_data(current_broadcast=current_broadcast)
     await ask_for_button(msg, state)
-    await state.set_state(BroadcastState.confirming)
 
-async def ask_for_button(msg: Message, state: FSMContext):
-    await msg.answer("<b>Хотите добавить кнопку со ссылкой?</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+async def ask_for_button(msg_or_call, state: FSMContext):
+    await msg_or_call.answer("<b>Хотите добавить кнопку со ссылкой?</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Да", callback_data="yes_button"),
          InlineKeyboardButton(text="Нет", callback_data="no_button")]
     ]))
+    await state.set_state(BroadcastState.waiting_for_button_text)
 
 @router.callback_query(F.data == "yes_button")
 async def button_yes(call: CallbackQuery, state: FSMContext):
@@ -103,18 +112,22 @@ async def button_yes(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "no_button")
 async def button_no(call: CallbackQuery, state: FSMContext):
     await call.answer()
-    await show_preview(call.message, state)
-    await state.set_state(BroadcastState.confirming)
+    await save_current_broadcast_and_ask_additional(call.message, state)
 
 @router.message(BroadcastState.waiting_for_button_text)
 async def button_text(msg: Message, state: FSMContext):
     if msg.text == "/cancel":
         await cancel_broadcast(msg, state)
         return
-    await state.update_data(button_text=msg.text)
-    await msg.answer("<b>Теперь введите ссылку.</b>\n\n"
-                     "Поддерживаются ссылки на каналы/сайты/чаты.\n"
-                     "Также ссылки формата: www.domain, для перехода в личные сообщения - t.me/юзернейм ( БЕЗ @).")
+
+    data = await state.get_data()
+    current_broadcast = data.get('current_broadcast', {})
+
+    # Сохраняем текст кнопки
+    current_broadcast['button_text'] = msg.text
+    await state.update_data(current_broadcast=current_broadcast)
+
+    await msg.answer("<b>Теперь введите ссылку.</b>\n\nПоддерживаются ссылки на каналы/сайты/чаты.\nТакже ссылки формата: www.domain, для перехода в личные сообщения - t.me/юзернейм (БЕЗ @).")
     await state.set_state(BroadcastState.waiting_for_button_url)
 
 @router.message(BroadcastState.waiting_for_button_url)
@@ -122,30 +135,77 @@ async def button_url(msg: Message, state: FSMContext):
     if msg.text == "/cancel":
         await cancel_broadcast(msg, state)
         return
-    await state.update_data(button_url=msg.text)
-    await show_preview(msg, state)
-    await state.set_state(BroadcastState.confirming)
 
-async def show_preview(msg: Message, state: FSMContext):
     data = await state.get_data()
-    keyboard = None
-    if 'button_text' in data and 'button_url' in data:
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=data['button_text'], url=data['button_url'])]
-        ])
-    await msg.answer("\U0001F4E2 Предпросмотр рассылки:")
-    if 'photo' in data:
-        await msg.answer_photo(photo=data['photo'], caption=data['text'], reply_markup=keyboard)
-    elif 'video_note' in data:
-        await msg.answer_video_note(video_note=data['video_note'], reply_markup=keyboard)
-    else:
-        await msg.answer(data['text'], reply_markup=keyboard)
+    current_broadcast = data.get('current_broadcast', {})
+    current_broadcast['button_url'] = msg.text
+    await state.update_data(current_broadcast=current_broadcast)
 
-    await msg.answer("<b>Отправить рассылку сейчас или через определённое количество минут?</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Сейчас", callback_data="confirm_send")],
-        [InlineKeyboardButton(text="Отложить", callback_data="delay_send")],
-        [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_send")]
-    ]))
+    await save_current_broadcast_and_ask_additional(msg, state)
+
+async def save_current_broadcast_and_ask_additional(msg_or_call, state: FSMContext):
+    data = await state.get_data()
+    current_broadcast = data.get('current_broadcast', {})
+    broadcasts = data.get('broadcasts', [])
+
+    broadcasts.append(current_broadcast)
+    await state.update_data(broadcasts=broadcasts)
+    await state.update_data(current_broadcast={})
+
+    await show_preview_for_broadcast(msg_or_call, current_broadcast)
+
+    if len(broadcasts) >= 2:
+        await msg_or_call.answer(
+            "<b>Максимум 2 рассылки. Отправить рассылки сейчас или отложить?</b>",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Сейчас", callback_data="confirm_send")],
+                [InlineKeyboardButton(text="Отложить", callback_data="delay_send")],
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_send")]
+            ])
+        )
+        await state.set_state(BroadcastState.confirming)
+        return
+
+    await msg_or_call.answer(
+        "<b>Хотите добавить ещё одну рассылку?</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Да", callback_data="add_more_yes"),
+             InlineKeyboardButton(text="Нет", callback_data="add_more_no")]
+        ])
+    )
+    await state.set_state(BroadcastState.waiting_for_additional_broadcast)
+
+async def show_preview_for_broadcast(msg_or_call, broadcast):
+    keyboard = None
+    if 'button_text' in broadcast and 'button_url' in broadcast:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=broadcast['button_text'], url=broadcast['button_url'])]
+        ])
+
+    await msg_or_call.answer("\U0001F4E2 Предпросмотр рассылки:")
+    if 'photo' in broadcast:
+        await msg_or_call.answer_photo(photo=broadcast['photo'], caption=broadcast['text'], reply_markup=keyboard)
+    elif 'video_note' in broadcast:
+        await msg_or_call.answer_video_note(video_note=broadcast['video_note'], reply_markup=keyboard)
+    else:
+        await msg_or_call.answer(broadcast['text'], reply_markup=keyboard)
+
+@router.callback_query(BroadcastState.waiting_for_additional_broadcast)
+async def additional_broadcast_decision(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    if call.data == "add_more_yes":
+        await call.message.answer("<b>Пожалуйста, отправьте текст второй рассылки.</b>\n<b>Отправьте /cancel для отмены.</b>")
+        await state.set_state(BroadcastState.waiting_for_text)
+    elif call.data == "add_more_no":
+        await call.message.answer(
+            "<b>Отправить рассылку сейчас или через определённое количество минут?</b>",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Сейчас", callback_data="confirm_send")],
+                [InlineKeyboardButton(text="Отложить", callback_data="delay_send")],
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_send")]
+            ])
+        )
+        await state.set_state(BroadcastState.confirming)
 
 @router.callback_query(BroadcastState.confirming)
 async def confirm_broadcast(call: CallbackQuery, state: FSMContext):
@@ -158,7 +218,8 @@ async def confirm_broadcast(call: CallbackQuery, state: FSMContext):
         await call.message.answer("<b>Через сколько минут отправить рассылку?</b>")
         await state.set_state(BroadcastState.waiting_for_delay_minutes)
         return
-    await perform_broadcast(call.message, state)
+    if call.data == "confirm_send":
+        await perform_broadcast(call.message, state)
 
 @router.message(BroadcastState.waiting_for_delay_minutes)
 async def delay_minutes(msg: Message, state: FSMContext):
@@ -175,40 +236,43 @@ async def delay_minutes(msg: Message, state: FSMContext):
 
 async def perform_broadcast(msg_or_call, state: FSMContext):
     data = await state.get_data()
+    broadcasts = data.get('broadcasts', [])
     users = get_all_users()
-    keyboard = None
-    if 'button_text' in data and 'button_url' in data:
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=data['button_text'], url=data['button_url'])]
-        ])
 
     count = 0
-    for user_id in users:
-        try:
-            if 'photo' in data:
-                await msg_or_call.bot.send_photo(
-                    chat_id=user_id,
-                    photo=data['photo'],
-                    caption=data['text'],
-                    reply_markup=keyboard,
-                    parse_mode="HTML"
-                )
-            elif 'video_note' in data:
-                await msg_or_call.bot.send_video_note(
-                    chat_id=user_id,
-                    video_note=data['video_note'],
-                    reply_markup=keyboard
-                )
-            else:
-                await msg_or_call.bot.send_message(
-                    chat_id=user_id,
-                    text=data['text'],
-                    reply_markup=keyboard,
-                    parse_mode="HTML"
-                )
-            count += 1
-        except Exception as e:
-            print(f"Ошибка при отправке {user_id}: {e}")
+    for broadcast in broadcasts:
+        keyboard = None
+        if 'button_text' in broadcast and 'button_url' in broadcast:
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=broadcast['button_text'], url=broadcast['button_url'])]
+            ])
+
+        for user_id in users:
+            try:
+                if 'photo' in broadcast:
+                    await msg_or_call.bot.send_photo(
+                        chat_id=user_id,
+                        photo=broadcast['photo'],
+                        caption=broadcast['text'],
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
+                    )
+                elif 'video_note' in broadcast:
+                    await msg_or_call.bot.send_video_note(
+                        chat_id=user_id,
+                        video_note=broadcast['video_note'],
+                        reply_markup=keyboard
+                    )
+                else:
+                    await msg_or_call.bot.send_message(
+                        chat_id=user_id,
+                        text=broadcast['text'],
+                        reply_markup=keyboard,
+                        parse_mode="HTML"
+                    )
+                count += 1
+            except Exception as e:
+                print(f"Ошибка при отправке {user_id}: {e}")
 
     await msg_or_call.answer(f"Рассылка завершена. Успешно отправлено: {count}")
     await state.clear()
